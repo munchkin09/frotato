@@ -17,6 +17,8 @@ var player_info = {
 	"id": 0 # Se asignará al conectar
 }
 
+# Referencia al prefab del jugador
+var player_scene = preload("res://Player/Player.tscn") 
 # Diccionario de TODOS los jugadores conectados: { id: { name, role, id } }
 var players = {}
 
@@ -126,3 +128,15 @@ func change_role(new_role):
 		# Si soy el servidor, replico el cambio a todos
 		if multiplayer.is_server():
 			rpc("update_player_list", players)
+
+# --- GESTIÓN DE LA PARTIDA (FRO-F1-005) ---
+
+@rpc("authority", "call_local", "reliable")
+func start_game():
+	# Esta función la llama el servidor, pero se ejecuta en TODOS (call_local)
+	
+	# Cambiamos la escena
+	var scene_path = "res://scenes/Arena.tscn"
+	get_tree().change_scene_to_file(scene_path)
+	
+	print("Cargando Arena de combate...")
