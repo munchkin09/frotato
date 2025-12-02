@@ -1,0 +1,75 @@
+[gd_scene load_steps=2 format=3 uid="uid://q87do5urupnm"]
+
+[ext_resource type="Script" uid="uid://ckwid3u6dcctm" path="res://scenes/lobby.gd" id="1_6jt0u"]
+
+[node name="Lobby" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("1_6jt0u")
+
+[node name="PanelConnect" type="Panel" parent="."]
+unique_name_in_owner = true
+clip_contents = true
+layout_mode = 0
+offset_top = 1.0
+offset_right = 750.0
+offset_bottom = 354.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelConnect"]
+layout_mode = 0
+offset_right = 750.0
+offset_bottom = 242.0
+
+[node name="NameInput" type="LineEdit" parent="PanelConnect/VBoxContainer"]
+unique_name_in_owner = true
+clip_contents = true
+layout_mode = 2
+placeholder_text = "Tu puto apodo"
+alignment = 1
+
+[node name="IpInput" type="LineEdit" parent="PanelConnect/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HostButton" type="Button" parent="PanelConnect/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "HOST"
+
+[node name="JoinButton" type="Button" parent="PanelConnect/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "JOIN"
+
+[node name="ErrorLabel" type="Label" parent="PanelConnect/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="PanelWaitingRoom" type="Panel" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelWaitingRoom"]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="Label" type="Label" parent="PanelWaitingRoom/VBoxContainer"]
+layout_mode = 2
+text = "Sala de esperras"
+
+[node name="PlayerListContainer" type="VBoxContainer" parent="PanelWaitingRoom/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="StartGameButton" type="Button" parent="PanelWaitingRoom/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "¡INICIAR LA MATANZA!"
+
+[connection signal="pressed" from="PanelConnect/VBoxContainer/HostButton" to="." method="_on_host_button_pressed"]
+[connection signal="pressed" from="PanelConnect/VBoxContainer/JoinButton" to="." method="_on_join_button_pressed"]
+[connection signal="pressed" from="PanelWaitingRoom/VBoxContainer/StartGameButton" to="." method="_on_start_game_button_pressed"]
