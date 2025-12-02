@@ -16,7 +16,7 @@ func spawn_players():
 		var new_player = PLAYER_SCENE.instantiate()
 		
 		# Asignar el ID es CRÍTICO para la autoridad
-		new_player.player_id = id 
+		new_player.name = str(id)
 		
 		# Posicionamiento básico aleatorio para que no salgan pegados
 		new_player.position = Vector2(400, 300) + Vector2(randf_range(-100, 100), randf_range(-100, 100))

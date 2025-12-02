@@ -51,15 +51,9 @@ func _on_join_button_pressed():
 
 # --- EVENTOS DENTRO DEL LOBBY ---
 
-func _on_role_button_pressed():
-	# Lógica simple de toggle
-	var my_id = multiplayer.get_unique_id()
-	var current_role = NetworkManager.players[my_id].role
-	
-	var new_role = "Overlord" if current_role == "Hero" else "Hero"
-	
-	# Llamamos a la función RPC que creamos en NetworkManager
-	NetworkManager.rpc("change_role", new_role)
+# FRO-21: Función _on_role_button_pressed eliminada.
+# El rol de Overlord es exclusivo del Host y no se puede cambiar.
+# El botón de rol se oculta en refresh_lobby_ui().
 
 func _on_start_game_button_pressed():
 	# Solo el Host (authority) puede dar la orden
@@ -86,43 +80,41 @@ func refresh_lobby_ui():
 	# Verificar si soy Host para mostrar el botón de Iniciar
 	start_button.visible = multiplayer.is_server()
 	
-	# Validaciones básicas para el botón START (1 Overlord, +1 Héroe)
+	# Validaciones básicas para el botón START (1 Overlord, +1 Frotato)
 	var overlords = 0
-	var heroes = 0
+	var frotatos = 0
 	
 	# Rellenar lista
 	for id in NetworkManager.players:
 		var p = NetworkManager.players[id]
 		var label = Label.new()
 		
-		# Formato: "Nombre (Rol) [HOST]"
+		# Formato: "Nombre [Rol] (HOST/OVERLORD)"
 		var text = p.name + " [" + p.role + "]"
 		if id == 1:
-			text += " (HOST)"
+			text += " (HOST/OVERLORD)"
 		
 		# Color diferente para el usuario local
 		if id == multiplayer.get_unique_id():
 			text = ">> " + text + " <<"
 			label.modulate = Color.GREEN
 			
-			# Actualizar texto de mi botón de rol
-			role_button.text = "Cambiar Rol (Soy " + p.role + ")"
-			
 		label.text = text
 		player_list_container.add_child(label)
 		
 		# Conteo para validación
 		if p.role == "Overlord": overlords += 1
-		else: heroes += 1
+		else: frotatos += 1
 	
 	# Lógica simple de validación visual
+	# FRO-21: Siempre habrá 1 Overlord (el Host), solo validamos que haya Frotatos
 	if multiplayer.is_server():
-		if overlords == 1 and heroes >= 1:
+		if overlords == 1 and frotatos >= 1:
 			start_button.disabled = false
 			start_button.text = "INICIAR PARTIDA"
 		else:
 			start_button.disabled = true
-			start_button.text = "Esperando (Falta 1 Overlord o Héroes)"
+			start_button.text = "Esperando jugadores (Frotatos)"
 
 # --- GESTIÓN DE ERRORES ---
 
