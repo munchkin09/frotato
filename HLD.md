@@ -113,11 +113,3 @@ Dado que es acción rápida, la latencia es crítica.
     * *Solución:* Sistema de "Rubber banding" (si los héroes van perdiendo, la tienda les ofrece descuentos; si el Overlord va perdiendo, gana recursos más rápido).
 2.  **Rendimiento de Red:** Sincronizar 300 enemigos en pantalla para 4 jugadores es costoso.
     * *Solución:* No sincronizar cada movimiento de cada enemigo pequeño. Sincronizar solo el "spawner" y usar lógica determinista, o agrupar enemigos en "hordas" que se mueven como una sola entidad lógica.
-
----
-
-### ¿Cuál es el siguiente paso?
-
-Este documento sienta las bases. Para empezar a prototipar, el siguiente paso lógico sería definir **"Las 3 Cs" (Character, Camera, Control)**.
-
-**¿Te gustaría que desarrolle una lista detallada de las "Clases de Héroes" y las "Habilidades del Overlord" para empezar a visualizar el balance del juego?**
