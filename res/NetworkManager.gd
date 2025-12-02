@@ -77,10 +77,22 @@ func _on_peer_connected(id):
 	print("Jugador conectado: ", id)
 
 func _on_peer_disconnected(id):
+	# FRO-20: Gestión de desconexiones (Cleanup)
+	# Esta función se ejecuta en TODOS cuando alguien se desconecta.
 	print("Jugador desconectado: ", id)
-	if players.has(id):
-		players.erase(id)
-		player_list_changed.emit()
+	
+	# Solo el servidor gestiona la eliminación y sincronización
+	if multiplayer.is_server():
+		if players.has(id):
+			var disconnected_player_name = players[id].name
+			players.erase(id)
+			print("Servidor: Eliminado jugador '", disconnected_player_name, "' del diccionario.")
+			
+			# Reenviar el diccionario actualizado a todos los clientes restantes
+			rpc("update_player_list", players)
+			
+			# Emitir señal local también para actualizar UI del servidor
+			player_list_changed.emit()
 
 func _on_connected_to_server():
 	print("¡Conexión exitosa al servidor!")

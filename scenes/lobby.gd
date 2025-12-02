@@ -124,8 +124,21 @@ func _on_connection_failed():
 	error_label.text = "Error: No se pudo conectar al servidor."
 
 func _on_server_disconnected():
-	panel_connect.visible = true
-	panel_waiting.visible = false
-	error_label.text = "El servidor ha cerrado la sala."
+	# FRO-20: Si el Host se desconecta, mostrar aviso y volver al Menú Principal
+	print("Host desconectado. Regresando al menú principal...")
+	
 	# Limpiamos datos locales
 	NetworkManager.players.clear()
+	
+	# Mostrar aviso antes de cambiar de escena
+	# Usamos un Timer para dar tiempo al usuario de ver el mensaje
+	panel_connect.visible = true
+	panel_waiting.visible = false
+	error_label.text = "El servidor ha cerrado la sala. Regresando al menú..."
+	
+	# Crear timer para volver al menú principal después de mostrar el aviso
+	var timer = get_tree().create_timer(2.0) # 2 segundos de espera
+	await timer.timeout
+	
+	# Cambiar a la escena del menú principal
+	get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
