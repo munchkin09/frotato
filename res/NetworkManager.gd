@@ -11,9 +11,11 @@ const MAX_CLIENTS = 4
 const DEFAULT_SERVER_IP = "127.0.0.1"
 
 # Información del jugador local
+# NOTA: El rol por defecto es "Frotato" para clientes.
+# Solo el Host tendrá el rol "Overlord" (asignado en create_game).
 var player_info = {
 	"name": "Player", 
-	"role": "Hero", # Roles: "Hero", "Overlord"
+	"role": "Frotato", # Roles: "Frotato", "Overlord" (exclusivo del Host)
 	"id": 0 # Se asignará al conectar
 }
 
@@ -42,10 +44,12 @@ func create_game():
 	multiplayer.multiplayer_peer = peer
 	
 	# El Host también es un jugador, así que lo registramos localmente
+	# FRO-21: El Host SIEMPRE es el Overlord
 	player_info.id = 1 
+	player_info.role = "Overlord"
 	players[1] = player_info
 	player_list_changed.emit()
-	print("Servidor creado. Esperando jugadores...")
+	print("Servidor creado como Overlord. Esperando jugadores...")
 
 func join_game(ip_address = ""):
 	if ip_address == "":
@@ -104,9 +108,13 @@ func _on_server_disconnected():
 func register_player(new_player_info):
 	var new_player_id = multiplayer.get_remote_sender_id()
 	
+	# FRO-21: Forzamos el rol "Frotato" a todos los clientes que se conectan
+	# Solo el Host (id=1) puede ser Overlord
+	new_player_info.role = "Frotato"
+	
 	# 1. Guardar al nuevo jugador en el diccionario del servidor
 	players[new_player_id] = new_player_info
-	print("Servidor: Registrado nuevo jugador ", new_player_info.name)
+	print("Servidor: Registrado nuevo jugador ", new_player_info.name, " como Frotato")
 	
 	# 2. Enviar el diccionario ACTUALIZADO a TODOS los clientes (incluido el nuevo)
 	# Esto asegura que todos tengan la lista completa
@@ -119,15 +127,9 @@ func update_player_list(server_player_list):
 	player_list_changed.emit()
 	print("Lista de jugadores actualizada: ", players.size(), " jugadores.")
 
-# Función extra para cambiar de rol (FRO-F1-003 adelantado)
-@rpc("any_peer", "call_local", "reliable")
-func change_role(new_role):
-	var sender_id = multiplayer.get_remote_sender_id()
-	if players.has(sender_id):
-		players[sender_id].role = new_role
-		# Si soy el servidor, replico el cambio a todos
-		if multiplayer.is_server():
-			rpc("update_player_list", players)
+# FRO-21: Función change_role eliminada.
+# El rol de Overlord es exclusivo del Host y no se puede cambiar.
+# Los clientes siempre son "Frotato".
 
 # --- GESTIÓN DE LA PARTIDA (FRO-F1-005) ---
 
