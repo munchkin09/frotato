@@ -1,0 +1,22 @@
+[gd_scene load_steps=2 format=3 uid="uid://dou75l7v87qy"]
+
+[ext_resource type="Script" uid="uid://cekgdq17lvo24" path="res://scenes/arena.gd" id="1_5ftpa"]
+
+[node name="Arena" type="Node2D"]
+script = ExtResource("1_5ftpa")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+offset_right = 1152.0
+offset_bottom = 652.0
+color = Color(0.35017928, 0.35205212, 0.42394617, 1)
+
+[node name="BattleLabel" type="Label" parent="."]
+offset_left = 508.0
+offset_top = 326.0
+offset_right = 622.0
+offset_bottom = 349.0
+text = "BATTLE ARENA"
+
+[node name="MultiplayerSpawner" type="MultiplayerSpawner" parent="."]
+_spawnable_scenes = PackedStringArray("uid://d3js8kuj63irr")
+spawn_path = NodePath("..")
