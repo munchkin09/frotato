@@ -4,6 +4,19 @@
 
 extends CharacterBody2D
 
+#region Constants
+## Acciones de input para movimiento (definidas en project.godot)
+const INPUT_MOVE_LEFT := "move_left"
+const INPUT_MOVE_RIGHT := "move_right"
+const INPUT_MOVE_UP := "move_up"
+const INPUT_MOVE_DOWN := "move_down"
+#endregion
+
+#region Node References
+## Referencia al sprite del personaje para efectos visuales (flip, animaciones).
+@onready var sprite: Sprite2D = $Sprite2D
+#endregion
+
 #region Stats Configuration
 ## Configuración base de estadísticas del héroe.
 ## Asignar un Resource HeroStats desde el Inspector para personalizar el personaje.
@@ -13,6 +26,14 @@ extends CharacterBody2D
 ## Estadísticas activas del héroe (instancia runtime).
 ## Esta es una copia independiente de base_stats para trackear HP y modificadores.
 var stats: HeroStats
+
+## Dirección actual del movimiento (normalizada).
+## Útil para otros sistemas como apuntado o animaciones.
+var current_direction := Vector2.ZERO
+
+## Indica si el personaje está mirando hacia la derecha.
+## Se usa para el flip del sprite.
+var facing_right := true
 #endregion
 
 #region Lifecycle
@@ -56,14 +77,42 @@ func _physics_process(_delta: float) -> void:
 	# la autoridad que acabamos de configurar arriba.
 	if is_multiplayer_authority():
 		_handle_movement()
+		_update_sprite_direction()
 
 
 ## Procesa el input de movimiento y aplica la velocidad usando stats.move_speed.
+## Usa Input.get_vector() para normalizar automáticamente el vector de dirección,
+## evitando que el movimiento diagonal sea más rápido.
 func _handle_movement() -> void:
-	var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	# get_vector normaliza automáticamente, evitando velocidad diagonal excesiva
+	current_direction = Input.get_vector(
+		INPUT_MOVE_LEFT, 
+		INPUT_MOVE_RIGHT, 
+		INPUT_MOVE_UP, 
+		INPUT_MOVE_DOWN
+	)
+	
 	var current_speed := stats.move_speed if stats else 300.0
-	velocity = direction * current_speed
+	velocity = current_direction * current_speed
+	
+	# move_and_slide usa física correcta para no atravesar paredes
 	move_and_slide()
+
+
+## Actualiza la dirección visual del sprite según el movimiento horizontal.
+## Hace flip del sprite cuando el personaje cambia de dirección.
+func _update_sprite_direction() -> void:
+	if not sprite:
+		return
+	
+	# Solo actualizar si hay movimiento horizontal significativo
+	if abs(current_direction.x) > 0.1:
+		var should_face_right := current_direction.x > 0
+		
+		# Solo hacer flip si cambió la dirección
+		if should_face_right != facing_right:
+			facing_right = should_face_right
+			sprite.flip_h = not facing_right
 #endregion
 
 #region Stats Callbacks
@@ -124,4 +173,14 @@ func get_base_damage() -> float:
 ## Verifica si el héroe está vivo.
 func is_alive() -> bool:
 	return stats.is_alive() if stats else true
+
+
+## Retorna la dirección actual de movimiento normalizada.
+func get_current_direction() -> Vector2:
+	return current_direction
+
+
+## Retorna true si el personaje está mirando hacia la derecha.
+func is_facing_right() -> bool:
+	return facing_right
 #endregion
