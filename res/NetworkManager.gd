@@ -15,7 +15,7 @@ const DEFAULT_SERVER_IP = "127.0.0.1"
 # Solo el Host tendrá el rol "Overlord" (asignado en create_game).
 var player_info = {
 	"name": "Player", 
-	"role": "Frotato", # Roles: "Frotato", "Overlord" (exclusivo del Host)
+	"role": "Frotato", # Roles: "Frotato"(y variaciones)
 	"id": 0 # Se asignará al conectar
 }
 
