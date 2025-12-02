@@ -62,10 +62,10 @@ func _on_role_button_pressed():
 	NetworkManager.rpc("change_role", new_role)
 
 func _on_start_game_button_pressed():
-	# Aquí iría la validación (FRO-F1-004)
-	# Por ahora, simplemente imprimimos o iniciamos
-	print("El Host ha iniciado la partida")
-	# NetworkManager.start_game() <--- Esto lo haremos en la siguiente tarea
+	# Solo el Host (authority) puede dar la orden
+	if multiplayer.is_server():
+		# Llamamos a la RPC start_game en el NetworkManager
+		NetworkManager.rpc("start_game")
 
 # --- ACTUALIZACIÓN DE UI ---
 

@@ -34,10 +34,12 @@ layout_mode = 2
 [node name="HostButton" type="Button" parent="PanelConnect/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
+text = "HOST"
 
 [node name="JoinButton" type="Button" parent="PanelConnect/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
+text = "JOIN"
 
 [node name="ErrorLabel" type="Label" parent="PanelConnect/VBoxContainer"]
 unique_name_in_owner = true
