@@ -36,6 +36,14 @@ var current_direction := Vector2.ZERO
 var facing_right := true
 #endregion
 
+#region Network Interpolation
+## Variables para interpolación suave de otros jugadores
+var network_position := Vector2.ZERO
+var network_velocity := Vector2.ZERO
+var interpolation_speed := 10.0
+var position_threshold := 100.0  # Distancia máxima para interpolación vs teletransporte
+#endregion
+
 #region Lifecycle
 func _enter_tree() -> void:
 	# _enter_tree se ejecuta justo cuando el Spawner crea el nodo.
@@ -47,6 +55,7 @@ func _enter_tree() -> void:
 func _ready() -> void:
 	_initialize_stats()
 	_connect_stat_signals()
+	_setup_network_synchronization()
 
 
 ## Inicializa las estadísticas del héroe.
@@ -69,15 +78,42 @@ func _connect_stat_signals() -> void:
 		stats.hero_died.connect(_on_hero_died)
 		stats.damage_taken.connect(_on_damage_taken)
 		stats.healed.connect(_on_healed)
+
+
+## Configura la sincronización de red para interpolación suave.
+func _setup_network_synchronization() -> void:
+	# Inicializar variables de red con la posición actual
+	network_position = global_position
+	network_velocity = velocity
+	
+	# Conectar la señal de cambio de propiedades del MultiplayerSynchronizer
+	var synchronizer = get_node("MultiplayerSynchronizer")
+	if synchronizer:
+		# En Godot 4.x, podemos usar MultiplayerSynchronizer.delta_synchronized
+		# para detectar cuando se reciben actualizaciones
+		synchronizer.delta_synchronized.connect(_on_network_data_received)
+	else:
+		push_warning("Player: No se encontró MultiplayerSynchronizer")
+
+
+## Callback para cuando se reciben datos de red del MultiplayerSynchronizer.
+func _on_network_data_received() -> void:
+	if not is_multiplayer_authority():
+		# Actualizar variables de interpolación cuando lleguen datos nuevos
+		network_position = position
+		network_velocity = velocity
 #endregion
 
 #region Movement
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	# is_multiplayer_authority() devuelve true si MI ID de red coincide con
 	# la autoridad que acabamos de configurar arriba.
 	if is_multiplayer_authority():
 		_handle_movement()
 		_update_sprite_direction()
+	else:
+		# Para otros jugadores, interpolar suavemente a la posición de red
+		_handle_network_interpolation(delta)
 
 
 ## Procesa el input de movimiento y aplica la velocidad usando stats.move_speed.
@@ -143,6 +179,36 @@ func _on_damage_taken(damage_amount: float) -> void:
 func _on_healed(heal_amount: float) -> void:
 	# TODO: Reproducir efecto de curación, sonido, etc.
 	print("[Player %s] Curado por %.1f" % [name, heal_amount])
+#endregion
+
+#region Network Interpolation
+## Maneja la interpolación suave de la posición para jugadores remotos.
+## Se ejecuta solo en clientes que NO tienen autoridad sobre este jugador.
+func _handle_network_interpolation(delta: float) -> void:
+	# Calcular la distancia al objetivo
+	var distance_to_target := global_position.distance_to(network_position)
+	
+	# Si la distancia es muy grande, teletransportar inmediatamente
+	if distance_to_target > position_threshold:
+		global_position = network_position
+		velocity = network_velocity
+	else:
+		# Interpolación suave hacia la posición objetivo
+		global_position = global_position.lerp(network_position, interpolation_speed * delta)
+		velocity = velocity.lerp(network_velocity, interpolation_speed * delta)
+	
+	# Actualizar dirección visual basada en la velocidad de red
+	if network_velocity.length() > 0.1:
+		current_direction = network_velocity.normalized()
+		_update_sprite_direction()
+
+
+## Callback llamado automáticamente cuando se reciben datos de red.
+## Actualiza las variables de interpolación para otros jugadores.
+func _on_network_position_changed() -> void:
+	if not is_multiplayer_authority():
+		network_position = position
+		network_velocity = velocity
 #endregion
 
 #region Public API
