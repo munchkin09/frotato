@@ -17,6 +17,8 @@ config/icon="res://icon.svg"
 [autoload]
 
 NetworkManager="*res://res/NetworkManager.gd"
+GameManager="*res://res/GameManager.gd"
+NetworkDebug="*res://res/NetworkDebug.gd"
 
 [input]
 
