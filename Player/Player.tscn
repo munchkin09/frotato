@@ -1,10 +1,13 @@
-[gd_scene load_steps=5 format=3 uid="uid://d3js8kuj63irr"]
+[gd_scene load_steps=6 format=3 uid="uid://d3js8kuj63irr"]
 
 [ext_resource type="Texture2D" uid="uid://5l5pdsms4fff" path="res://icon.svg" id="1_3qydi"]
 [ext_resource type="Script" uid="uid://dt2m5inkqeekv" path="res://Player/player.gd" id="1_q3lat"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_q3lat"]
 size = Vector2(126, 128)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_hurtbox"]
+size = Vector2(100, 100)
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_tok1r"]
 properties/0/path = NodePath(".:position")
@@ -22,8 +25,13 @@ properties/3/replication_mode = 1
 properties/4/path = NodePath(".:current_state")
 properties/4/spawn = true
 properties/4/replication_mode = 1
+properties/5/path = NodePath(".:is_invulnerable")
+properties/5/spawn = true
+properties/5/replication_mode = 1
 
 [node name="Player" type="CharacterBody2D"]
+collision_layer = 1
+collision_mask = 0
 script = ExtResource("1_q3lat")
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
@@ -31,6 +39,17 @@ texture = ExtResource("1_3qydi")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_q3lat")
+
+[node name="HurtBox" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 2
+monitorable = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="HurtBox"]
+shape = SubResource("RectangleShape2D_hurtbox")
+
+[node name="InvulnerabilityTimer" type="Timer" parent="."]
+one_shot = true
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
 process_priority = 1
