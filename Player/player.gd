@@ -40,8 +40,33 @@ var facing_right := true
 ## Variables para interpolación suave de otros jugadores
 var network_position := Vector2.ZERO
 var network_velocity := Vector2.ZERO
-var interpolation_speed := 10.0
-var position_threshold := 100.0  # Distancia máxima para interpolación vs teletransporte
+var interpolation_speed := 15.0  # Aumentado para mayor responsividad
+var position_threshold := 10.0  # Aumentado para evitar teletransportes innecesarios
+var min_update_distance := 1.3   # Distancia mínima para actualizar posición
+var min_update_velocity := 5.0   # Velocidad mínima para actualizar velocidad
+#endregion
+
+#region Death and Spectator System
+## Estado actual del jugador
+enum PlayerState {
+	ALIVE,		## Jugador vivo y activo
+	DYING,		## Reproduciendo animación de muerte
+	SPECTATOR	## Modo espectador (muerto)
+}
+
+## Estado actual del jugador
+var current_state: PlayerState = PlayerState.ALIVE
+
+## Referencia al CollisionShape2D para deshabilitar colisiones
+@onready var collision_shape: CollisionShape2D = $CollisionShape2D
+
+## Transparencia objetivo para la animación de muerte
+var death_alpha_target := 0.3
+var death_animation_speed := 3.0
+
+## Señales para el sistema de muerte
+signal player_died(player_id: int)
+signal player_became_spectator(player_id: int)
 #endregion
 
 #region Lifecycle
@@ -56,6 +81,8 @@ func _ready() -> void:
 	_initialize_stats()
 	_connect_stat_signals()
 	_setup_network_synchronization()
+	_connect_to_game_manager()
+	_register_with_debug()
 
 
 ## Inicializa las estadísticas del héroe.
@@ -78,42 +105,197 @@ func _connect_stat_signals() -> void:
 		stats.hero_died.connect(_on_hero_died)
 		stats.damage_taken.connect(_on_damage_taken)
 		stats.healed.connect(_on_healed)
+		
+		# Conectar señales internas para propagación global
+		player_died.connect(_on_player_died_internal)
+		player_became_spectator.connect(_on_player_became_spectator_internal)
 
 
 ## Configura la sincronización de red para interpolación suave.
 func _setup_network_synchronization() -> void:
-	# Inicializar variables de red con la posición actual
-	network_position = global_position
-	network_velocity = velocity
+	# Solo el jugador con autoridad debe inicializar y enviar su posición.
+	# Los clientes remotos recibirán estos valores a través del MultiplayerSynchronizer.
+	if is_multiplayer_authority():
+		# Esperar un frame para que la posición inicial esté establecida por el spawner
+		await get_tree().process_frame
+		# Inicializar variables de red con la posición actual para el primer envío
+		network_position = global_position
+		network_velocity = Vector2.ZERO
+
+	# Nota: El MultiplayerSynchronizer se encarga de actualizar las propiedades
+	# 'network_position' y 'network_velocity' en los clientes remotos.
+	# No se necesitan callbacks adicionales como 'delta_synchronized' si la
+	# interpolación se maneja directamente en _physics_process.
+#endregion
+
+#region Death System
+## Inicia la secuencia de muerte del jugador.
+func _start_death_sequence() -> void:
+## Inicia la secuencia de muerte del jugador. Se llama en el cliente con autoridad.
+func _initiate_death() -> void:
+	# Llama a la función de muerte en todas las copias de este jugador (incluida la local)
+	rpc("_start_death_sequence")
+
+@rpc("any_peer", "call_local")
+func _start_death_sequence():
+	if current_state != PlayerState.ALIVE:
+		return  # Ya está muriendo o muerto
 	
-	# Conectar la señal de cambio de propiedades del MultiplayerSynchronizer
-	var synchronizer = get_node("MultiplayerSynchronizer")
-	if synchronizer:
-		# En Godot 4.x, podemos usar MultiplayerSynchronizer.delta_synchronized
-		# para detectar cuando se reciben actualizaciones
-		synchronizer.delta_synchronized.connect(_on_network_data_received)
+	print("[Player %s] Iniciando secuencia de muerte..." % name)
+	current_state = PlayerState.DYING
+	
+	# Deshabilitar física y colisiones inmediatamente
+	_disable_physics()
+	
+	# Reproducir feedback visual/sonoro
+	_play_death_feedback()
+
+
+## Deshabilita la física y colisiones del jugador.
+func _disable_physics() -> void:
+	# Deshabilitar colisiones
+	if collision_shape:
+		collision_shape.disabled = true
+	
+	# Detener movimiento
+	velocity = Vector2.ZERO
+	
+	# Opcional: Deshabilitar procesamiento de input
+	set_physics_process(true)  # Mantener activo para animación de muerte
+
+
+## Reproduce efectos visuales y sonoros de muerte.
+func _play_death_feedback() -> void:
+	# TODO: Reproducir sonido de muerte
+	# AudioManager.play_sound("player_death")
+	
+	# Efecto visual: hacer el sprite semi-transparente
+	if sprite:
+		# Crear un tween para animar la transparencia
+		var tween = create_tween()
+		tween.tween_property(sprite, "modulate:a", death_alpha_target, 1.0)
+		tween.tween_callback(_finish_death_sequence)
+
+
+## Maneja la animación durante el estado de muerte.
+func _handle_death_animation(delta: float) -> void:
+	# Animación simple: rotación lenta
+	if sprite:
+		sprite.rotation += death_animation_speed * delta
+
+
+## Finaliza la secuencia de muerte y entra en modo espectador.
+func _finish_death_sequence() -> void:
+	print("[Player %s] Entrando en modo espectador" % name)
+	current_state = PlayerState.SPECTATOR
+	
+	# Emitir señal de espectador
+	player_became_spectator.emit(name.to_int())
+	
+	# Deshabilitar completamente el procesamiento físico
+	set_physics_process(false)
+	
+	# El personaje "desaparece" visualmente pero el nodo permanece
+	# para mantener la cámara activa si es necesario
+	if sprite:
+		sprite.visible = false
+
+
+## Conecta este jugador con el GameManager global.
+func _connect_to_game_manager() -> void:
+	# Solo conectar si el GameManager está disponible
+	if GameManager:
+		GameManager.connect_player_signals(self)
+		print("[Player %s] Conectado al GameManager" % name)
 	else:
-		push_warning("Player: No se encontró MultiplayerSynchronizer")
+		push_warning("Player: GameManager no está disponible")
 
 
-## Callback para cuando se reciben datos de red del MultiplayerSynchronizer.
-func _on_network_data_received() -> void:
-	if not is_multiplayer_authority():
-		# Actualizar variables de interpolación cuando lleguen datos nuevos
-		network_position = position
-		network_velocity = velocity
+## Se ejecuta cuando el nodo está siendo liberado
+func _exit_tree() -> void:
+	# Desconectar del GameManager al salir
+	if GameManager:
+		GameManager.disconnect_player_signals(self)
+	
+	# Desregistrarse del NetworkDebug
+	if NetworkDebug:
+		NetworkDebug.unregister_player(self)
+
+
+## Registra este jugador con el sistema de debug de red
+func _register_with_debug() -> void:
+	if NetworkDebug:
+		NetworkDebug.register_player(self)
+
+
+## Callbacks internos para propagación de señales globales.
+func _on_player_died_internal(player_id: int) -> void:
+	# Las señales ya se propagan automáticamente a través del GameManager
+	print("[Player %s] Señal de muerte propagada al GameManager" % name)
+
+
+func _on_player_became_spectator_internal(player_id: int) -> void:
+	# Las señales ya se propagan automáticamente a través del GameManager
+	print("[Player %s] Señal de espectador propagada al GameManager" % name)
+
+
+## Verifica si el jugador puede realizar acciones (está vivo).
+func can_act() -> bool:
+	return current_state == PlayerState.ALIVE
+
+
+## Retorna el estado actual del jugador.
+func get_player_state() -> PlayerState:
+	return current_state
+
+
+## Revive al jugador (para futuras mecánicas de resurrección).
+func revive() -> void:
+	if current_state == PlayerState.SPECTATOR:
+		print("[Player %s] ¡Reviviendo!" % name)
+		
+		# Restaurar estado
+		current_state = PlayerState.ALIVE
+		
+		# Restaurar física
+		if collision_shape:
+			collision_shape.disabled = false
+		
+		# Restaurar visual
+		if sprite:
+			sprite.visible = true
+			sprite.modulate.a = 1.0
+			sprite.rotation = 0.0
+		
+		# Restaurar HP
+		if stats:
+			stats.restore_full_hp()
+		
+		# Reactivar procesamiento
+		set_physics_process(true)
 #endregion
 
 #region Movement
 func _physics_process(delta: float) -> void:
+	# Manejar animaciones de muerte independientemente de la autoridad
+	if current_state == PlayerState.DYING:
+		_handle_death_animation(delta)
+		return
+	
 	# is_multiplayer_authority() devuelve true si MI ID de red coincide con
 	# la autoridad que acabamos de configurar arriba.
 	if is_multiplayer_authority():
-		_handle_movement()
-		_update_sprite_direction()
+		# Solo procesar movimiento si el jugador está vivo
+		if current_state == PlayerState.ALIVE:
+			_handle_movement()
+			_update_sprite_direction()
+			# Actualizar variables de red para otros clientes
+			network_position = global_position
+			network_velocity = velocity
 	else:
 		# Para otros jugadores, interpolar suavemente a la posición de red
-		_handle_network_interpolation(delta)
+		if current_state == PlayerState.ALIVE:
+			_handle_network_interpolation(delta)
 
 
 ## Procesa el input de movimiento y aplica la velocidad usando stats.move_speed.
@@ -145,7 +327,7 @@ func _update_sprite_direction() -> void:
 	if abs(current_direction.x) > 0.1:
 		var should_face_right := current_direction.x > 0
 		
-		# Solo hacer flip si cambió la dirección
+		# Solo hacer flip si cambió la dirección (evitar parpadeos)
 		if should_face_right != facing_right:
 			facing_right = should_face_right
 			sprite.flip_h = not facing_right
@@ -163,8 +345,15 @@ func _on_hp_changed(new_hp: float, max_hp: float) -> void:
 
 ## Callback cuando el héroe muere.
 func _on_hero_died() -> void:
-	# TODO: Implementar lógica de muerte (animación, respawn, game over, etc.)
 	print("[Player %s] ¡Ha muerto!" % name)
+	
+	# Solo el cliente con autoridad inicia el proceso de muerte
+	if is_multiplayer_authority():
+		_start_death_sequence()
+		_initiate_death()
+	
+	# Emitir señal para notificar al GameMode
+	player_died.emit(name.to_int())
 
 
 ## Callback cuando el héroe recibe daño.
@@ -185,6 +374,10 @@ func _on_healed(heal_amount: float) -> void:
 ## Maneja la interpolación suave de la posición para jugadores remotos.
 ## Se ejecuta solo en clientes que NO tienen autoridad sobre este jugador.
 func _handle_network_interpolation(delta: float) -> void:
+	# Verificar que tenemos datos válidos de red
+	if network_position == Vector2.ZERO:
+		return
+	
 	# Calcular la distancia al objetivo
 	var distance_to_target := global_position.distance_to(network_position)
 	
@@ -192,23 +385,23 @@ func _handle_network_interpolation(delta: float) -> void:
 	if distance_to_target > position_threshold:
 		global_position = network_position
 		velocity = network_velocity
+		print("[Player %s] Teletransporte: distancia %.1f > %.1f" % [name, distance_to_target, position_threshold])
 	else:
 		# Interpolación suave hacia la posición objetivo
-		global_position = global_position.lerp(network_position, interpolation_speed * delta)
-		velocity = velocity.lerp(network_velocity, interpolation_speed * delta)
+		# Usar un factor de interpolación adaptivo basado en la distancia
+		var lerp_factor = minf(interpolation_speed * delta, 1.0)
+		global_position = global_position.lerp(network_position, lerp_factor)
+		velocity = velocity.lerp(network_velocity, lerp_factor)
 	
 	# Actualizar dirección visual basada en la velocidad de red
 	if network_velocity.length() > 0.1:
 		current_direction = network_velocity.normalized()
 		_update_sprite_direction()
+	else:
+		# Si no hay velocidad, mantener la dirección actual
+		current_direction = Vector2.ZERO
 
 
-## Callback llamado automáticamente cuando se reciben datos de red.
-## Actualiza las variables de interpolación para otros jugadores.
-func _on_network_position_changed() -> void:
-	if not is_multiplayer_authority():
-		network_position = position
-		network_velocity = velocity
 #endregion
 
 #region Public API
@@ -249,4 +442,18 @@ func get_current_direction() -> Vector2:
 ## Retorna true si el personaje está mirando hacia la derecha.
 func is_facing_right() -> bool:
 	return facing_right
+
+
+## Función de debug para verificar el estado de sincronización.
+func debug_network_state() -> Dictionary:
+	return {
+		"is_authority": is_multiplayer_authority(),
+		"position": global_position,
+		"network_position": network_position,
+		"velocity": velocity,
+		"network_velocity": network_velocity,
+		"distance_to_network": global_position.distance_to(network_position),
+		"current_state": current_state,
+		"facing_right": facing_right
+	}
 #endregion
