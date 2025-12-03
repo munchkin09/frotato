@@ -8,7 +8,6 @@ extends Control
 @onready var player_list_container = %PlayerListContainer
 @onready var error_label = %ErrorLabel
 @onready var start_button = %StartGameButton
-@onready var role_button = %RoleButton
 
 func _ready():
 	# Conectamos las señales del NetworkManager
