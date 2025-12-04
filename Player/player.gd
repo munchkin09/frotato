@@ -15,6 +15,31 @@ const INPUT_MOVE_DOWN := "move_down"
 #region Node References
 ## Referencia al sprite del personaje para efectos visuales (flip, animaciones).
 @onready var sprite: Sprite2D = $Sprite2D
+
+## Referencia a la HurtBox para detectar colisiones con enemigos.
+## La HurtBox es un Area2D que detecta cuando un enemigo entra en contacto con el héroe.
+@onready var hurt_box: Area2D = $HurtBox
+
+## Timer para controlar la duración de los I-Frames (invulnerabilidad).
+@onready var invulnerability_timer: Timer = $InvulnerabilityTimer
+
+@onready var health_component = $HealthComponent 
+#endregion
+
+#region Invulnerability System (I-Frames)
+## Duración de la invulnerabilidad en segundos cuando el héroe recibe daño.
+## Valores recomendados: 0.5s - 1.0s para balance típico de juegos de acción.
+@export_range(0.1, 3.0, 0.1) var invulnerability_duration: float = 0.8
+
+## Cantidad de parpadeos durante la invulnerabilidad.
+## Mayor número = parpadeo más rápido y visible.
+@export_range(1, 20, 1) var blink_count: int = 8
+
+## Indica si el héroe está actualmente invulnerable.
+var is_invulnerable: bool = false
+
+## Referencia al Tween activo para el efecto de parpadeo.
+var blink_tween: Tween = null
 #endregion
 
 #region Stats Configuration
@@ -67,6 +92,9 @@ var death_animation_speed := 3.0
 ## Señales para el sistema de muerte
 signal player_died(player_id: int)
 signal player_became_spectator(player_id: int)
+
+## Señal emitida cuando el héroe entra o sale de invulnerabilidad.
+signal invulnerability_changed(is_invulnerable: bool)
 #endregion
 
 #region Lifecycle
@@ -80,10 +108,10 @@ func _enter_tree() -> void:
 func _ready() -> void:
 	_initialize_stats()
 	_connect_stat_signals()
+	_setup_invulnerability_system()
 	_setup_network_synchronization()
 	_connect_to_game_manager()
 	_register_with_debug()
-
 
 ## Inicializa las estadísticas del héroe.
 ## Si no hay base_stats asignado, crea uno con valores por defecto.
@@ -94,21 +122,41 @@ func _initialize_stats() -> void:
 	else:
 		# Crear estadísticas por defecto si no se asignó ninguna
 		stats = HeroStats.new()
-		stats.initialize()
+		stats.create_instance()
 		push_warning("Player: No se asignó base_stats, usando valores por defecto.")
-
+	health_component.stats = stats
 
 ## Conecta las señales de estadísticas para reaccionar a cambios de HP.
 func _connect_stat_signals() -> void:
-	if stats:
-		stats.hp_changed.connect(_on_hp_changed)
-		stats.hero_died.connect(_on_hero_died)
-		stats.damage_taken.connect(_on_damage_taken)
-		stats.healed.connect(_on_healed)
+	if health_component:
+		health_component.hp_changed.connect(_on_hp_changed)
+		health_component.hero_died.connect(_on_hero_died)
+		health_component.damage_taken.connect(_on_damage_taken)
+		health_component.healed.connect(_on_healed)
 		
 		# Conectar señales internas para propagación global
 		player_died.connect(_on_player_died_internal)
 		player_became_spectator.connect(_on_player_became_spectator_internal)
+
+
+## Configura el sistema de invulnerabilidad (I-Frames).
+## Conecta las señales de la HurtBox y configura el Timer.
+func _setup_invulnerability_system() -> void:
+	# Configurar el Timer de invulnerabilidad
+	if invulnerability_timer:
+		invulnerability_timer.wait_time = invulnerability_duration
+		invulnerability_timer.one_shot = true
+		invulnerability_timer.timeout.connect(_on_invulnerability_timer_timeout)
+	else:
+		push_warning("Player: InvulnerabilityTimer no encontrado. El sistema de I-Frames no funcionará.")
+	
+	# Conectar la señal de la HurtBox para detectar colisiones con enemigos
+	if hurt_box:
+		hurt_box.area_entered.connect(_on_hurt_box_area_entered)
+		hurt_box.body_entered.connect(_on_hurt_box_body_entered)
+		print("[Player %s] Sistema de HurtBox configurado correctamente." % name)
+	else:
+		push_warning("Player: HurtBox no encontrada. El héroe no detectará colisiones con enemigos.")
 
 
 ## Configura la sincronización de red para interpolación suave.
@@ -129,15 +177,9 @@ func _setup_network_synchronization() -> void:
 #endregion
 
 #region Death System
+
 ## Inicia la secuencia de muerte del jugador.
 func _start_death_sequence() -> void:
-## Inicia la secuencia de muerte del jugador. Se llama en el cliente con autoridad.
-func _initiate_death() -> void:
-	# Llama a la función de muerte en todas las copias de este jugador (incluida la local)
-	rpc("_start_death_sequence")
-
-@rpc("any_peer", "call_local")
-func _start_death_sequence():
 	if current_state != PlayerState.ALIVE:
 		return  # Ya está muriendo o muerto
 	
@@ -273,6 +315,151 @@ func revive() -> void:
 		
 		# Reactivar procesamiento
 		set_physics_process(true)
+		
+		# Resetear invulnerabilidad
+		is_invulnerable = false
+#endregion
+
+#region Damage & Invulnerability System (I-Frames)
+## Callback cuando un Area2D (enemigo con Area2D) entra en la HurtBox.
+## Esto detecta colisiones con proyectiles enemigos o zonas de daño.
+## @param area: El Area2D que entró en contacto
+func _on_hurt_box_area_entered(area: Area2D) -> void:
+	# Solo procesar si somos la autoridad y estamos vivos
+	if not is_multiplayer_authority() or current_state != PlayerState.ALIVE:
+		return
+	
+	# Ignorar si estamos invulnerables
+	if is_invulnerable:
+		print("[Player %s] Colisión ignorada (invulnerable)" % name)
+		return
+	
+	# Verificar si el área es un enemigo o proyectil enemigo
+	# Los enemigos deben estar en el grupo "enemies" o tener un método "get_damage()"
+	if area.is_in_group("enemies") or area.is_in_group("enemy_projectiles"):
+		var damage := _get_damage_from_source(area)
+		_apply_damage_with_invulnerability(damage)
+		print("[Player %s] ¡Golpeado por Area2D enemigo! Daño: %.1f" % [name, damage])
+
+
+## Callback cuando un CharacterBody2D/RigidBody2D (enemigo con cuerpo físico) entra en la HurtBox.
+## Esto detecta colisiones directas con enemigos que usan CharacterBody2D.
+## @param body: El cuerpo físico que entró en contacto
+func _on_hurt_box_body_entered(body: Node2D) -> void:
+	# Solo procesar si somos la autoridad y estamos vivos
+	if not is_multiplayer_authority() or current_state != PlayerState.ALIVE:
+		return
+	
+	# Ignorar si estamos invulnerables
+	if is_invulnerable:
+		print("[Player %s] Colisión con cuerpo ignorada (invulnerable)" % name)
+		return
+	
+	# Verificar si el cuerpo es un enemigo
+	if body.is_in_group("enemies"):
+		var damage := _get_damage_from_source(body)
+		_apply_damage_with_invulnerability(damage)
+		print("[Player %s] ¡Golpeado por enemigo! Daño: %.1f" % [name, damage])
+
+
+## Obtiene el daño de una fuente de daño.
+## Si la fuente tiene un método get_damage(), lo usa. Si no, usa daño por defecto.
+## @param source: El nodo que causa el daño
+## @return: La cantidad de daño a aplicar
+func _get_damage_from_source(source: Node) -> float:
+	# Intentar obtener el daño del enemigo si tiene el método
+	if source.has_method("get_damage"):
+		return source.get_damage()
+	
+	# Si tiene una propiedad "damage", usarla
+	if "damage" in source:
+		return source.damage
+	
+	# Daño por defecto si no se puede determinar
+	return 10.0
+
+
+## Aplica daño al héroe y activa la invulnerabilidad.
+## @param damage: Cantidad de daño a aplicar
+func _apply_damage_with_invulnerability(damage: float) -> void:
+	# Aplicar el daño
+	take_damage(damage)
+	
+	# Activar invulnerabilidad solo si seguimos vivos
+	if stats and stats.is_alive():
+		_start_invulnerability()
+
+
+## Inicia el periodo de invulnerabilidad.
+func _start_invulnerability() -> void:
+	if is_invulnerable:
+		return  # Ya estamos invulnerables
+	
+	print("[Player %s] ¡Invulnerabilidad activada por %.1fs!" % [name, invulnerability_duration])
+	is_invulnerable = true
+	invulnerability_changed.emit(true)
+	
+	# Iniciar el timer
+	if invulnerability_timer:
+		invulnerability_timer.wait_time = invulnerability_duration
+		invulnerability_timer.start()
+	
+	# Iniciar el efecto de parpadeo
+	_start_blink_effect()
+
+
+## Finaliza el periodo de invulnerabilidad.
+func _end_invulnerability() -> void:
+	print("[Player %s] Invulnerabilidad terminada." % name)
+	is_invulnerable = false
+	invulnerability_changed.emit(false)
+	
+	# Detener y limpiar el efecto de parpadeo
+	_stop_blink_effect()
+
+
+## Callback cuando el Timer de invulnerabilidad termina.
+func _on_invulnerability_timer_timeout() -> void:
+	_end_invulnerability()
+
+
+## Inicia el efecto visual de parpadeo durante la invulnerabilidad.
+## Usa un Tween para animar el alpha del sprite entre visible e invisible.
+func _start_blink_effect() -> void:
+	if not sprite:
+		return
+	
+	# Cancelar cualquier tween anterior
+	_stop_blink_effect()
+	
+	# Crear nuevo tween para el parpadeo
+	blink_tween = create_tween()
+	blink_tween.set_loops(blink_count)  # Repetir N veces
+	
+	# Calcular duración de cada ciclo de parpadeo
+	var blink_duration := invulnerability_duration / (blink_count * 2.0)
+	
+	# Secuencia de parpadeo: invisible -> visible
+	blink_tween.tween_property(sprite, "modulate:a", 0.3, blink_duration)
+	blink_tween.tween_property(sprite, "modulate:a", 1.0, blink_duration)
+	
+	# Asegurar que el sprite quede visible al terminar
+	blink_tween.tween_callback(_ensure_sprite_visible)
+
+
+## Detiene el efecto de parpadeo y restaura la visibilidad normal del sprite.
+func _stop_blink_effect() -> void:
+	if blink_tween and blink_tween.is_valid():
+		blink_tween.kill()
+		blink_tween = null
+	
+	_ensure_sprite_visible()
+
+
+## Asegura que el sprite sea completamente visible.
+func _ensure_sprite_visible() -> void:
+	if sprite and current_state == PlayerState.ALIVE:
+		sprite.modulate.a = 1.0
 #endregion
 
 #region Movement
@@ -350,7 +537,6 @@ func _on_hero_died() -> void:
 	# Solo el cliente con autoridad inicia el proceso de muerte
 	if is_multiplayer_authority():
 		_start_death_sequence()
-		_initiate_death()
 	
 	# Emitir señal para notificar al GameMode
 	player_died.emit(name.to_int())
@@ -406,17 +592,24 @@ func _handle_network_interpolation(delta: float) -> void:
 
 #region Public API
 ## Aplica daño al héroe desde fuentes externas.
+## Respeta el estado de invulnerabilidad: si el héroe está en I-Frames, el daño es ignorado.
 ## @param amount: Cantidad de daño a aplicar
-func take_damage(amount: float) -> void:
-	if stats:
-		stats.take_damage(amount)
-
+## @param ignore_invulnerability: Si es true, ignora la invulnerabilidad (para daño ambiental, etc.)
+func take_damage(amount: float, ignore_invulnerability: bool = false) -> void:
+	# Verificar invulnerabilidad
+	if is_invulnerable and not ignore_invulnerability:
+		print("[Player %s] Daño bloqueado por invulnerabilidad" % name)
+		return
+	
+	if health_component:
+		health_component.apply_damage(amount)
 
 ## Cura al héroe desde fuentes externas.
 ## @param amount: Cantidad de curación a aplicar
 func heal(amount: float) -> void:
-	if stats:
-		stats.heal(amount)
+	if health_component:
+		health_component.heal(amount)
+		#stats.heal(amount)
 
 
 ## Retorna el rango de recolección de items del héroe.
@@ -431,7 +624,12 @@ func get_base_damage() -> float:
 
 ## Verifica si el héroe está vivo.
 func is_alive() -> bool:
-	return stats.is_alive() if stats else true
+	return health_component.is_alive() if health_component else true
+
+
+## Verifica si el héroe está actualmente invulnerable (en I-Frames).
+func is_currently_invulnerable() -> bool:
+	return is_invulnerable
 
 
 ## Retorna la dirección actual de movimiento normalizada.
@@ -454,6 +652,7 @@ func debug_network_state() -> Dictionary:
 		"network_velocity": network_velocity,
 		"distance_to_network": global_position.distance_to(network_position),
 		"current_state": current_state,
-		"facing_right": facing_right
+		"facing_right": facing_right,
+		"is_invulnerable": is_invulnerable
 	}
 #endregion

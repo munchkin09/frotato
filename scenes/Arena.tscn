@@ -20,3 +20,12 @@ text = "BATTLE ARENA"
 [node name="MultiplayerSpawner" type="MultiplayerSpawner" parent="."]
 _spawnable_scenes = PackedStringArray("uid://d3js8kuj63irr")
 spawn_path = NodePath("..")
+spawn_limit = 4
+
+[node name="EnemiesContainer" type="Node2D" parent="."]
+position = Vector2(989, 191)
+
+[node name="MultiplayerSpawner_Enemies" type="MultiplayerSpawner" parent="."]
+_spawnable_scenes = PackedStringArray("uid://bioln4bce5gha")
+spawn_path = NodePath("../EnemiesContainer")
+spawn_limit = 100
