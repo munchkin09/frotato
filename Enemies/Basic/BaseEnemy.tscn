@@ -1,0 +1,34 @@
+[gd_scene load_steps=5 format=3 uid="uid://bioln4bce5gha"]
+
+[ext_resource type="Texture2D" uid="uid://b3j5rrne3bhvu" path="res://assets/enemy4.png" id="1_3mcck"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_5jnve"]
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_5jnve"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:velocity")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_y5feh"]
+radius = 113.0
+height = 426.0
+
+[node name="BaseEnemy" type="CharacterBody2D"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CapsuleShape2D_5jnve")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("1_3mcck")
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="."]
+debug_enabled = true
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
+replication_config = SubResource("SceneReplicationConfig_5jnve")
+
+[node name="CollisionShape2D2" type="CollisionShape2D" parent="."]
+shape = SubResource("CapsuleShape2D_y5feh")
