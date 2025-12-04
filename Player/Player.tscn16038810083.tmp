@@ -68,6 +68,8 @@ replication_config = SubResource("SceneReplicationConfig_tok1r")
 [node name="HealthComponent" type="Node" parent="."]
 script = ExtResource("3_tok1r")
 stats = SubResource("Resource_8g4oa")
+base_max_health = null
+current_health = null
 metadata/_custom_type_script = "uid://ct6gwnwnathqo"
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="HealthComponent"]

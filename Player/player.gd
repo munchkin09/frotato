@@ -22,6 +22,8 @@ const INPUT_MOVE_DOWN := "move_down"
 
 ## Timer para controlar la duración de los I-Frames (invulnerabilidad).
 @onready var invulnerability_timer: Timer = $InvulnerabilityTimer
+
+@onready var health_component = $HealthComponent 
 #endregion
 
 #region Invulnerability System (I-Frames)
@@ -111,7 +113,6 @@ func _ready() -> void:
 	_connect_to_game_manager()
 	_register_with_debug()
 
-
 ## Inicializa las estadísticas del héroe.
 ## Si no hay base_stats asignado, crea uno con valores por defecto.
 func _initialize_stats() -> void:
@@ -121,17 +122,17 @@ func _initialize_stats() -> void:
 	else:
 		# Crear estadísticas por defecto si no se asignó ninguna
 		stats = HeroStats.new()
-		stats.initialize()
+		stats.create_instance()
 		push_warning("Player: No se asignó base_stats, usando valores por defecto.")
-
+	health_component.stats = stats
 
 ## Conecta las señales de estadísticas para reaccionar a cambios de HP.
 func _connect_stat_signals() -> void:
-	if stats:
-		stats.hp_changed.connect(_on_hp_changed)
-		stats.hero_died.connect(_on_hero_died)
-		stats.damage_taken.connect(_on_damage_taken)
-		stats.healed.connect(_on_healed)
+	if health_component:
+		health_component.hp_changed.connect(_on_hp_changed)
+		health_component.hero_died.connect(_on_hero_died)
+		health_component.damage_taken.connect(_on_damage_taken)
+		health_component.healed.connect(_on_healed)
 		
 		# Conectar señales internas para propagación global
 		player_died.connect(_on_player_died_internal)
@@ -176,6 +177,7 @@ func _setup_network_synchronization() -> void:
 #endregion
 
 #region Death System
+
 ## Inicia la secuencia de muerte del jugador.
 func _start_death_sequence() -> void:
 	if current_state != PlayerState.ALIVE:
@@ -599,15 +601,15 @@ func take_damage(amount: float, ignore_invulnerability: bool = false) -> void:
 		print("[Player %s] Daño bloqueado por invulnerabilidad" % name)
 		return
 	
-	if stats:
-		stats.take_damage(amount)
-
+	if health_component:
+		health_component.apply_damage(amount)
 
 ## Cura al héroe desde fuentes externas.
 ## @param amount: Cantidad de curación a aplicar
 func heal(amount: float) -> void:
-	if stats:
-		stats.heal(amount)
+	if health_component:
+		health_component.heal(amount)
+		#stats.heal(amount)
 
 
 ## Retorna el rango de recolección de items del héroe.
@@ -622,7 +624,7 @@ func get_base_damage() -> float:
 
 ## Verifica si el héroe está vivo.
 func is_alive() -> bool:
-	return stats.is_alive() if stats else true
+	return health_component.is_alive() if health_component else true
 
 
 ## Verifica si el héroe está actualmente invulnerable (en I-Frames).
