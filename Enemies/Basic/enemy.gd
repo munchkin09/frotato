@@ -16,6 +16,9 @@ class_name BaseEnemy
 var target_body: Node2D = null
 
 func _ready() -> void:
+	if nav_agent == null:
+		push_error("BaseEnemy: nav_agent es null. Revisa el nodo NavigationAgent2D en la escena.")
+		return
 	# En Godot 4, es vital configurar esto para evitar errores de sincronización
 	# Si usamos un MultiplayerSpawner, la autoridad se asigna automáticamente, 
 	# pero es buena práctica asegurarlo.

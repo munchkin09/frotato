@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3 uid="uid://bioln4bce5gha"]
+[gd_scene load_steps=6 format=3 uid="uid://bioln4bce5gha"]
 
 [ext_resource type="Texture2D" uid="uid://b3j5rrne3bhvu" path="res://assets/enemy4.png" id="1_3mcck"]
+[ext_resource type="Script" uid="uid://o6lqx02cr3en" path="res://Enemies/Basic/enemy.gd" id="1_y5feh"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_5jnve"]
 
@@ -13,15 +14,19 @@ properties/1/spawn = true
 properties/1/replication_mode = 1
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_y5feh"]
-radius = 113.0
-height = 426.0
+radius = 30.0
+height = 72.0
 
-[node name="BaseEnemy" type="CharacterBody2D"]
+[node name="BaseEnemy" type="CharacterBody2D" node_paths=PackedStringArray("nav_agent")]
+script = ExtResource("1_y5feh")
+nav_agent = NodePath("NavigationAgent2D")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CapsuleShape2D_5jnve")
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
+position = Vector2(2.9999695, 0)
+scale = Vector2(0.17602041, 0.13013698)
 texture = ExtResource("1_3mcck")
 
 [node name="NavigationAgent2D" type="NavigationAgent2D" parent="."]
