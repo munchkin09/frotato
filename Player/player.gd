@@ -24,6 +24,8 @@ const INPUT_MOVE_DOWN := "move_down"
 @onready var invulnerability_timer: Timer = $InvulnerabilityTimer
 
 @onready var health_component = $HealthComponent 
+@onready var targeting_component: Node = $TargetingComponent
+@onready var weapon: Node2D = $Weapon
 #endregion
 
 #region Invulnerability System (I-Frames)
@@ -59,6 +61,8 @@ var current_direction := Vector2.ZERO
 ## Indica si el personaje está mirando hacia la derecha.
 ## Se usa para el flip del sprite.
 var facing_right := true
+
+var current_target: Node2D = null
 #endregion
 
 #region Network Interpolation
@@ -112,6 +116,20 @@ func _ready() -> void:
 	_setup_network_synchronization()
 	_connect_to_game_manager()
 	_register_with_debug()
+	_setup_targeting_and_weapon()
+
+func _setup_targeting_and_weapon() -> void:
+	if targeting_component and targeting_component.has_signal("target_changed"):
+		targeting_component.target_changed.connect(_on_target_changed)
+	if targeting_component.has_method("get_current_target"):
+		current_target = targeting_component.get_current_target()
+	if weapon and weapon.has_method("set_target"):
+		weapon.set_target(current_target)
+
+func _on_target_changed(new_target: Node2D) -> void:
+	current_target = new_target
+	if weapon and weapon.has_method("set_target"):
+		weapon.set_target(current_target)
 
 ## Inicializa las estadísticas del héroe.
 ## Si no hay base_stats asignado, crea uno con valores por defecto.
@@ -268,6 +286,14 @@ func _exit_tree() -> void:
 func _register_with_debug() -> void:
 	if NetworkDebug:
 		NetworkDebug.register_player(self)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not is_multiplayer_authority():
+		return
+	if event.is_action_pressed("ui_accept") and can_act():
+		if weapon and weapon.has_method("try_attack"):
+			weapon.try_attack()
 
 
 ## Callbacks internos para propagación de señales globales.
