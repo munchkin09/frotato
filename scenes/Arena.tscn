@@ -27,5 +27,10 @@ position = Vector2(989, 191)
 
 [node name="MultiplayerSpawner_Enemies" type="MultiplayerSpawner" parent="."]
 _spawnable_scenes = PackedStringArray("uid://bioln4bce5gha")
-spawn_path = NodePath("../EnemiesContainer")
+spawn_path = NodePath("..")
 spawn_limit = 100
+
+[node name="Timer" type="Timer" parent="."]
+autostart = true
+
+[connection signal="timeout" from="Timer" to="." method="_on_timer_timeout"]
